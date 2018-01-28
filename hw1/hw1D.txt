@@ -1,0 +1,20 @@
+D. Discuss a visual effect (10 pts)
+Take a screenshot (or photo) of an interesting visual effect you noticed in a video game or
+computational artwork. In a few paragraphs, describe the effect. What do you like about it?
+How do you think it was created? Does the effect change depending on the camera view?
+The lights? Is it an effect that updates the geometry itself, or change the color of the pixels,
+or does it alter a texture?
+
+https://static.trueachievements.com/customimages/055802.jpg
+
+The visual effect that intrigues me the most are the sweat and reflection effects that are placed
+onto the players in NBA2K. The effect seems to reflect away ligh from certain angles, and only if certain
+amount of restrictions are met. In this photo, you can clearly see the player sweating with white light effects
+reflecting off of his black skin. This creates a realistic look towards the players.
+
+This effect was created mostly likely through a similar technique as what we learned in three.js. It's much
+more complicated than say mirroring through a box, but the root techniques shouldn't be that much different. 
+The shine of the light as it is reflected off the sweat makes for a very realistic game photo. If you were to
+change view points, the light would still most likely be reflected from a actual light source point. I think 
+the effect appliesthe sweat texture on the character and the texture is just changed from that point. These
+effects are what makes games like 2kmore enjoyable since it immerses the player into the a semi-realistic environment. 
