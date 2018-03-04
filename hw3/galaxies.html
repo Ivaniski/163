@@ -74,8 +74,6 @@
 
 	 var clock = new THREE.Clock(1);	
 
-    var options;
-    var gui = new dat.GUI( { width: 500 } );
 
 	var container;
 
@@ -136,19 +134,6 @@
 
 		var Mesh1 = new THREE.Mesh(geometry1, material1);
 		scene.add( Mesh1 );
-
-		// -------------------------------gui control -----------------------------------
-    
-	options = {
-				terrainDisplacement: .001,
-			
-			};
-
-	gui.add( options, "terrainDisplacement", .0001 , 3 );
-	
-			
-
-	// -------------------------------gui control -----------------------------------
 
 
 		renderer = new THREE.WebGLRenderer();
