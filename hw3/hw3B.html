@@ -1,0 +1,326 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>hw3B</title>
+        <meta charset="utf-8">
+        <style>
+            body {
+              margin: 0px;
+                overflow: hidden;
+            }
+        </style>
+    </head>
+    <body>
+
+        <div id="container"></div>
+
+    <script src="js/three.js"></script>
+    <script src="js/dat.gui.min.js"></script>
+    <script src="js/OrbitControls.js"></script>
+    <script src="js/ImprovedNoise.js"></script>
+    <script src="js/Water.js"></script>
+
+    <script id="vertexShader" type="x-shader/x-vertex">
+        uniform mat4 modelMatrix;
+        uniform mat4 viewMatrix;
+        uniform mat4 projectionMatrix;
+        
+        attribute vec3 position;
+        attribute vec2 uv;
+        attribute vec3 normal;
+
+        // varying vec2 vUv; 
+        void main(){
+           gl_Position = projectionMatrix  * viewMatrix * modelMatrix  * vec4( position, 1.0 );
+        }
+
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        precision mediump float;
+        uniform vec2 iResolution;
+        uniform vec3 light_pos;
+        uniform vec3 light_diff;
+        uniform vec3 light_spec;
+        uniform float time;
+        uniform float time2;
+
+        // const int MAX_MARCHING_STEPS = 255;
+        // const float MIN_DIST = 0.0;
+        // const float MAX_DIST = 100.0;
+        // const float EPSILON = 0.0001;
+
+        /**
+        * Signed distance function for a sphere centered at the origin with radius 1.0;
+        */
+        float sphereSDF(vec3 p) {
+             //translate
+             p.x = p.x + 1.8;
+             p.y = p.y + -1.0;
+             return length(p) - 1.0;
+        }
+
+        float sdCappedCone(vec3 p, vec3 c){
+            p.x = p.x + 1.5;
+            p.y = p.y + -1.0;
+            vec2 q = vec2( length(p.xz), p.y );
+            vec2 v = vec2( c.z*c.y/c.x, -c.z );
+            vec2 w = v - q;
+            vec2 vv = vec2( dot(v,v), v.x*v.x );
+            vec2 qv = vec2( dot(v,w), v.x*w.x );
+            vec2 d = max(qv,0.0)*qv/vv;
+            return sqrt( dot(w,w) - max(d.x,d.y) ) * sign(max(q.y*v.x-q.x*v.y,w.y));
+        }
+
+        float sphereSDF2(vec3 p) {
+             //translate
+             p.x = p.x + -1.5 + time2;
+             return length(p) - 1.0;
+
+        }
+
+        float sdBox( vec3 p, vec3 b ){
+             //translate
+            p.x = p.x + -2.0;
+            vec3 d = abs(p) - b;
+            return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
+        }
+
+        float sdBox2( vec3 p, vec3 b ){
+             //translate
+            p.x = p.x + -1.5;
+            vec3 d = abs(p) - b;
+            return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
+        }
+
+        float opS( vec3 p ){
+            float x = sdBox2( p , vec3(0.7 + time2,.7 + time,0.7) );
+            float y = sphereSDF2(vec3(p - time2));
+
+            return max(x,-y);
+        }
+
+
+        float opU( vec3 p){
+            float x = sdCappedCone(p, vec3(.5,.3,2.0));
+            float y = sphereSDF(p);
+
+            return min(x,y);
+        }
+
+
+        /**
+        * Signed distance function describing the scene.
+        * 
+        * Absolute value of the return value indicates the distance to the surface.
+        * Sign indicates whether the point is inside or outside the surface,
+        * negative indicating inside.
+        */
+        float sceneSDF(vec3 p) {
+            float x = opU(p);
+            float y = opS(p);
+            
+            return min(x,y);
+        }
+
+       
+
+        /**
+         * Return the shortest distance from the eyepoint to the scene surface along
+         * the marching direction. If no part of the surface is found between start and end,
+         * return end.
+        * 
+        * eye: the eye point, acting as the origin of the ray
+        * marchingDirection: the normalized direction to march in
+        * start: the starting distance away from the eye
+        * end: the max distance away from the ey to march before giving up
+        */
+        float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, float end){
+            float depth = start;
+             // float MAX_MARCHING_STEPS = 255;
+            for(int i = 0; i < 255 ; i++){
+                float dist = sceneSDF(eye.xyz + (depth * marchingDirection.xyz));
+                if(dist < 0.00001){
+                    return depth;
+                }
+                depth += dist;
+                if(depth >= end){
+                    return end;
+                }
+            }
+            return end;
+        }
+        
+
+        /**
+        * Return the normalized direction to march in from the eye point for a single pixel.
+        * 
+        * fieldOfView: vertical field of view in degrees
+        * size: resolution of the output image
+        * fragCoord: the x,y coordinate of the pixel in the output image
+        */
+        vec3 rayDirection(float fieldOfView, vec2 size, vec2 fragCoord){
+            vec2 xy = fragCoord.xy - size.xy / 2.0;
+            float z = size.y / tan(radians(fieldOfView) / 2.0);
+            return normalize(vec3(xy, -z));
+        }
+
+        vec3 estimateNormal(vec3 p) {
+            return normalize(vec3(
+             sceneSDF(vec3(p.x + 0.0001, p.y, p.z)) - sceneSDF(vec3(p.x - 0.0001, p.y, p.z)),
+             sceneSDF(vec3(p.x, p.y+ 0.0001, p.z)) - sceneSDF(vec3(p.x, p.y - 0.0001, p.z)),
+             sceneSDF(vec3(p.x, p.y, p.z + 0.0001)) - sceneSDF(vec3(p.x, p.y, p.z - 0.0001))
+            ));
+        }
+
+        vec3 phongContribForLight(vec3 p, vec3 eye){
+            vec3 N = estimateNormal(p.xyz);
+            vec3 L = normalize(light_pos.xyz - p.xyz);
+            vec3 V = normalize(eye.xyz - p.xyz);
+            vec3 R = normalize(reflect(-L, N));
+
+            float dotLN = max(0.0, dot(L, N));
+            float dotRV = max(0.0, dot(R, V));
+            // not in light
+
+            // reflection not visible to viewer
+            if(dotLN < 0.0) 
+                return vec3(light_diff.xyz * dotLN);
+            
+            vec3 color = light_diff * dotLN + light_spec * pow(dotRV, 0.98);
+                return color;
+        }
+
+        void main(){
+            vec3 dir = rayDirection(45.0, iResolution.xy, gl_FragCoord.xy);
+            // camera position
+            vec3 eye = vec3(0.0,0.0, 10.0);
+            // MIN_DIST = 0.0 and MAX_DIST = 100.0
+            float dist = shortestDistanceToSurface(eye, dir, 0.0, 10000000.0);
+            if(dist > 1000.0 - 0.001){
+                 // Didn't hit anything
+                gl_FragColor = vec4(0.0,0.0,0.0,0.0);
+            } else {
+                vec3 p = eye.xyz + dist * dir.xyz;
+
+                // color of the shapes
+                vec3 kd = vec3(1.0, 1.0, 0.0);
+                vec3 ka = vec3(0.3, 0.0, 0.3);
+
+                vec3 phong = vec3(phongContribForLight(p.xyz, eye.xyz));
+
+                vec3 color = clamp(kd.xyz * phong.xyz, 0.0, 1.0);
+
+                gl_FragColor = vec4(color.xyz + ka.xyz, 1.0);
+            }
+        }
+    
+    </script>
+
+    <script>
+
+    var clock = new THREE.Clock(1);    
+
+    var container;
+
+    var camera, scene, renderer;
+
+    var vs = document.getElementById( 'vertexShader' ).textContent;
+    var fs = document.getElementById( 'fragmentShader' ).textContent;
+
+    var uniforms1;
+    
+
+    init();
+    animate();
+
+    function init() {
+
+        container = document.getElementById( 'container' );
+
+    // camera = new THREE.PerspectiveCamera( 70.0, window.innerWidth / window.innerHeight, 0.1, 1000 );
+        camera = new THREE.PerspectiveCamera( 90, window.innerWidth / window.innerHeight, 1, 2000 );
+
+        camera.position.z = 250;
+
+        scene = new THREE.Scene();
+            
+        
+    // geometry
+
+    var geometry1 = new THREE.PlaneBufferGeometry(window.innerWidth,window.innerHeight);
+
+    // material
+
+    var texture1 = new THREE.TextureLoader().load('galaxy.jpg', render);
+    var texture2 = new THREE.TextureLoader().load('galaxy2.jpg', render);
+
+    var light_pos = new THREE.Vector3(10.0, 10.0, 10.0);
+    var light_diff = new THREE.Vector3(1.0,1.0,0.0);
+    var light_spec = new THREE.Vector3(1.0,1.0,1.0);
+    
+
+    uniforms1 =  {
+        iResolution: { type: "v2", value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+        light_pos: {type: "v3", value: light_pos },
+        light_diff: {type: "v3", value: light_diff },
+        light_spec: {type: "v3", value: light_spec },
+        time: {type:"f", value: clock.getDelta()},
+        time2: {type:"f", value: clock.getDelta()}
+    
+    };
+     
+        var material1 = new THREE.RawShaderMaterial( {
+            uniforms: uniforms1,
+            vertexShader: vs,
+            fragmentShader: fs,            
+            side:THREE.DoubleSide
+        } );
+
+
+
+        var Mesh1 = new THREE.Mesh(geometry1, material1);
+        scene.add( Mesh1 );
+
+        renderer = new THREE.WebGLRenderer();
+        renderer.setClearColor( 0x999999 );
+        renderer.setPixelRatio( window.devicePixelRatio );
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        container.appendChild( renderer.domElement );
+
+        window.addEventListener( 'resize', onWindowResize, false );
+    }
+
+
+            function onWindowResize( event ) {
+
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+
+                renderer.setSize( window.innerWidth, window.innerHeight );
+            }
+            
+
+            function animate() {
+
+                requestAnimationFrame( animate );
+                render();
+
+
+            }
+
+            function render() {
+
+                uniforms1.time.value += .0008;
+                uniforms1.time2.value += .0002;
+
+                renderer.render( scene, camera );
+
+            }
+
+        </script>
+
+    </body>
+</html>
+
